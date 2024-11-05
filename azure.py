@@ -1,24 +1,21 @@
 from dotenv import load_dotenv
 import streamlit as st
 from PyPDF2 import PdfReader
+import openai
+
 from streamlit_extras.add_vertical_space import add_vertical_space
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
 from elasticsearch import Elasticsearch, helpers
-from langchain_community.vectorstores import ElasticsearchStore
-from langchain.chains.question_answering import load_qa_chain
-from langchain_community.llms import OpenAI
-from langchain_community.callbacks import get_openai_callback
+from langchain_elasticsearch import ElasticsearchStore
+from langchain.callbacks import get_openai_callback
 
-import openai
 from langchain_openai import AzureOpenAIEmbeddings
-# from openai import AzureOpenAI
-from langchain.llms import AzureOpenAI
-# from langchain import AzureOpenAI
-# from langchain.chains import load_qa_chain
-# from langchain.chains.qa import load_qa_chain
-import os
+from langchain.chains.question_answering import load_qa_chain
+# from langchain.llms import AzureOpenAI
+from openai import AzureOpenAI
+from langchain.chat_models import AzureChatOpenAI
 
+import os
 
 # Sidebar contents
 with st.sidebar:
@@ -37,17 +34,6 @@ with st.sidebar:
 
 def main():
     load_dotenv()
-    
-    # OPENAI_API_KEY= os.getenv("OPENAI_API_KEY")
-    # BASE_URL=os.getenv("BASE_URL")
-    # API_TYPE=os.getenv("API_TYPE")
-    # API_VERSION=os.getenv("API_VERSION")
-    
-    openai.api_key="6ef02367da1143b8bea6a4c1762d3e56"
-    openai.api_base="https://embeddings-testing1.openai.azure.com/"
-    openai.api_type="azure"
-    openai.api_version="2023-05-15"
-    # print("api key: ", OPENAI_API_KEY)
     
     ES_USER = os.getenv("ES_USER")
     ES_PASSWORD = os.getenv("ES_PASSWORD")
@@ -87,12 +73,17 @@ def main():
       )
       print(connection.info())
       
+      model_name = os.getenv('MODEL_NAME')
+      azure_embedding_endpoint = os.getenv('AZURE_EMBEDDING_ENDPOINT')
+      azure_embedding_api_key = os.getenv('AZURE_EMBEDDING_API_KEY')
+      azure_embedding_api_version = os.getenv("AZURE_EMBEDDING_API_VERSION")
+      
       # create embeddings
       embeddings = AzureOpenAIEmbeddings(
-        model="text-embedding-ada-002",
-        azure_endpoint=openai.api_base, 
-        api_key= openai.api_key,
-        openai_api_version=openai.api_version
+        model=model_name,
+        azure_endpoint=azure_embedding_endpoint, 
+        api_key= azure_embedding_api_key,
+        openai_api_version=azure_embedding_api_version
       )
       
       # embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
@@ -118,36 +109,27 @@ def main():
             es_user = ES_USER,
             es_password = ES_PASSWORD    
         )
-        
-      openai.api_type = "azure"
-      openai.api_key = "6ef02367da1143b8bea6a4c1762d3e56"  # Replace with your Azure API key
-      openai.api_base = "https://embeddings-testing1.openai.azure.com/"  # Replace with your Azure endpoint
-      openai.api_version = "2023-03-15-preview"  # Example API version
-      deployment_id = "gpt-4o"
       
-      llm = AzureOpenAI(
-            openai_api_key=openai.api_key, 
-            deployment_name=deployment_id, 
-            model_name="gpt-4o",
-            api_key=openai.api_key,
-            api_base=openai.api_base,
-            api_version=openai.api_version,
-            )    
-        
-      # llm = AzureOpenAI(
-      #     api_key=openai.api_key,  
-      #     api_version=openai.api_version,
-      #     azure_endpoint=openai.api_base,
-      #     azure_deployment=deployment_id
-      # )           
+      azure_api_key = os.getenv('AZURE_API_KEY')
+      azure_endpoint = os.getenv('AZURE_EDNPOINT')
+      azure_api_version = os.getenv('AZURE_API_VERSION')
+      azure_deployment_id = os.getenv('AZURE_DEPLOYMENT_ID')
+      
+      llm = AzureChatOpenAI(
+          api_key=azure_api_key,  
+          api_version=azure_api_version,
+          azure_endpoint=azure_endpoint,
+          azure_deployment=azure_deployment_id,
+      )           
+      
       # show user input
       with st.chat_message("user"):
         st.write("Hello World 👋")
-      user_question = st.text_input("Please ask a question about your PDF here:")
+      user_question = st.text_input("Please ask a question about your PDF here:", "what is the summary of the pdf?")
       if user_question:
         docs = docsearch.similarity_search(user_question)
               
-        chain = load_qa_chain(llm, chain_type="stuff")
+        chain = load_qa_chain(llm=llm, chain_type="stuff")
         with get_openai_callback() as cb:
           response = chain.run(input_documents=docs, question=user_question)
           print(cb)
